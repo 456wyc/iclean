@@ -1,0 +1,25 @@
+{
+  "name": "@tinoq/iclean",
+  "version": "1.0.0",
+  "description": "清理过期文件",
+  "main": "index.js",
+  "bin": {
+    "iclean": "./app.js"
+  },
+  "node-version": "~10.0.0",
+  "private": false,
+  "author": "456wyc",
+  "license": "ISC",
+  "dependencies": {
+    "commander": "^4.0.1",
+    "moment": "^2.24.0",
+    "shelljs": "^0.8.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "clean"
+  ]
+}
