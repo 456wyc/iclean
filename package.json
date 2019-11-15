@@ -7,7 +7,7 @@
     "iclean": "./app.js"
   },
   "node-version": "~10.0.0",
-  "private": true,
+  "private": false,
   "author": "456wyc",
   "license": "ISC",
   "dependencies": {
@@ -23,9 +23,6 @@
   "keywords": [
     "clean"
   ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/"
-  },
   "repository": {
     "url": "https://github.com/456wyc/iclean.git"
   }

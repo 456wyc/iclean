@@ -16,12 +16,15 @@
 Usage: iclean [options]
 
 Options:
-  -V, --version           output the version number
-  -d, --dir <path>        需要清理的文件夹路径
-  -m, --mode <string>     操作模式，复制[cp]，移动[mv]，查看[ls] (default: "ls")
-  -t, --timeout <number>  过期天数，不小于90 (default: 90)
-  -f, --force <boolean>   强制使用小于90天的参数 (default: false)
-  -l, --log <boolean>     输出日志 (default: true)
-  -v, --verb <boolean>    输出详细日志 (default: false)
-  -h, --help              output usage information
+  -V, --version              output the version number
+  -d, --dir <path>           【必要】需要清理的文件夹路径
+  -m, --mode <string>        操作模式，复制[cp]，移动[mv]，查看[ls] (default: "ls")
+  -t, --timeout <number>     过期天数，不小于90 (default: 90)
+  -r, --retain <number>      已删除文件保留天数，不小于7 (default: 15)
+  -f, --force <boolean>      当传入的 timeout，retain 小于限制的值时，强制使用 (default: false)
+  -l, --log <boolean>        输出日志 (default: true)
+  -v, --verb <boolean>       输出详细日志 (default: false)
+  -o, --onlytrash <boolean>  只清理回收站 (default: false)
+  -c, --confirm <boolean>    自动确认按参数执行，适用于自动化脚本 (default: false)
+  -h, --help                 output usage information
 ```
