@@ -186,7 +186,7 @@ async function clear(dirPath, isRoot) {
         if (MODE === 'mv') {
           // 移动模式
           await fsPromises.rename(filePath, path.resolve(targetPath, fileName))
-          await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
+          // await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
           log.info(`移动 ${filePath} 到 ${targetPath} 成功!`)
           continue;
         } 
