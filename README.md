@@ -17,7 +17,8 @@ Usage: iclean [options]
 
 Options:
   -V, --version              output the version number
-  -d, --dir <path>           【必要】需要清理的文件夹路径
+  -s, --src <path>           【必要】需要清理的文件夹路径
+  -d, --dest <path>          【必要】文件转移位置
   -m, --mode <string>        操作模式，复制[cp]，移动[mv]，查看[ls] (default: "ls")
   -t, --timeout <number>     过期天数，不小于90 (default: 90)
   -r, --retain <number>      已删除文件保留天数，不小于7 (default: 15)

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 const path = require('path')
+const fs = require('fs')
 const fsPromises = require('fs').promises
 const commander = require('commander')
 const moment = require('moment')
@@ -13,7 +14,8 @@ const program = new commander.Command()
 program.version(pkg.version)
 
 program
-  .requiredOption('-d, --dir <path>', '【必要】需要清理的文件夹路径')
+  .requiredOption('-s, --src <path>', '【必要】需要清理的文件夹路径')
+  .requiredOption('-d, --dest <path>', '【必要】文件转移位置')
   .option('-m, --mode <string>', '操作模式，复制[cp]，移动[mv]，查看[ls]', 'ls')
   .option('-t, --timeout <number>', '过期天数，不小于90', 90)
   .option('-r, --retain <number>', '已删除文件保留天数，不小于7', 15)
@@ -25,22 +27,29 @@ program
   // .option('-p, --pattern <string>', '文件夹名称匹配模式', /\d{4}-\d{2}-\d{2}/g)
 
 program.parse(process.argv)
-if (!program.dir) {
-  console.error('请指定文件目录，使用： --dir')
+if (!program.src) {
+  console.error('请指定需要清理的目录，使用： -s --src')
+  process.exit(1)
+}
+if (!program.dest) {
+  console.error('请指文件转移位置，使用： -d --dest')
   process.exit(1)
 }
 
-const rootPath = path.resolve(process.cwd(), program.dir)
+// const DELIMITER = '#' //路径扁平化分隔符
+const FILE_NAME_PATTERN = /^\d{4}-\d{2}-\d{2}$/ //需要操作的文件的名称匹配模式
+const dateString = moment().format('YYYY-MM-DD')
+
+// 参数
+const SRC_PATH = path.resolve(process.cwd(), program.src)  // eg. /a/b/c
+const DEST_PATH = path.resolve(process.cwd(), program.dest) // eg. /d/s
 const MODE = program.mode
 const FORCE = program.force
-const timeoutDay = !program.timeout || (program.timeout < 90 && !FORCE) ?
+const TIMEOUT_DAY = !program.timeout || (program.timeout < 90 && !FORCE) ?
   90 : Math.ceil(Math.abs(program.timeout));
 const LOG = program.log; //是否打印日志
 const VERB = program.verb; //是否打印详细日志
 // const PATTERN = program.pattern; //文件夹匹配模式
-const FILE_NAME_PATTERN = /^\d{4}-\d{2}-\d{2}$/ //需要操作的文件的名称匹配模式
-const TRASH_ROOT_DIR_NAME = '_trash' //回收站文件夹名称
-// const DELIMITER = '#' //路径扁平化分隔符
 // const RETAIN_DAYS = program.retain<7 ? 7 : Math.ceil(Math.abs(program.retain)); //回收站保留天数
 const RETAIN_DAYS = !program.retain || (program.retain < 7 && !FORCE) ?
   7 :  Math.ceil(Math.abs(program.retain)); //回收站保留天数
@@ -63,18 +72,22 @@ const log = {
   }
 }
 
+if(SRC_PATH == DEST_PATH){
+  console.error('src和dest不能相同')
+  process.exit(1)
+}
+const TRASH_ROOT = DEST_PATH + SRC_PATH // eg. /d/s/a/b/c
+const trashPath = path.resolve(TRASH_ROOT, dateString) // eg/ /d/s/a/b/c/2019-10-10
 
-
-const dateString = moment().format('YYYY-MM-DD')
-const trashRoot = path.resolve(rootPath, TRASH_ROOT_DIR_NAME)
-const trashPath = path.resolve(rootPath, TRASH_ROOT_DIR_NAME, dateString)
 start()
 
 async function start() {
   console.info('===================================')
-  log.info('搜索目录:', rootPath, 
+  log.info(
+    '搜索目录:', SRC_PATH, 
+    '\n回收目录:', trashPath, 
     '\n操作模式:', MODE,
-    '\n文件有效期（天）:', timeoutDay, 
+    '\n文件有效期（天）:', TIMEOUT_DAY, 
     '\n回收站保留期（天）:', RETAIN_DAYS,
     '\n强制减少有效期:', FORCE,
     '\n输出日志:', LOG,
@@ -98,11 +111,10 @@ async function start() {
     }
     //只有复制和移动模式下创建回收站目录
     if(['cp','mv'].includes(MODE)&& !ONLY_TRASH){
-      log.verb('')
       await fsPromises.mkdir(trashPath, {
         recursive: true
       })
-      log.verb(`回收站主目录:${trashRoot}, 今日回收站目录:${trashPath}`)
+      log.verb(`回收站主目录:${TRASH_ROOT}, 今日回收站目录:${trashPath}`)
     }
     
     log.info('开始:', moment().format())
@@ -112,7 +124,7 @@ async function start() {
       return;
     }
     log.info('清理回收站完成!')
-    await clear(rootPath, true)
+    await clear(SRC_PATH, true)
     log.info('结束:', moment().format())
   } catch (e) {
     log.err('异常：', e)
@@ -139,7 +151,7 @@ async function clear(dirPath, isRoot) {
     let timeDiff = moment().diff(moment(mtime), 'day') //时差
 
     //回收站不处理
-    if (fileName == TRASH_ROOT_DIR_NAME) {
+    if (filePath == TRASH_ROOT) {
       log.verb('回收站，不处理', fileName)
       continue;
     }
@@ -149,20 +161,30 @@ async function clear(dirPath, isRoot) {
       continue;
     }
 
-    log.verb(`开始处理:${fileName}; 文件夹？${fileStat.isDirectory()}; 回收站？${fileName==TRASH_ROOT_DIR_NAME}; 最后修改:${mtime}; 时间差:${timeDiff}; 名称合法？${FILE_NAME_PATTERN.test(fileName)}; 过期？${timeDiff > timeoutDay}`)
+    log.verb(`开始处理:${fileName}; 
+    文件夹？${fileStat.isDirectory()}; 
+    回收站？${fileName==TRASH_ROOT}; 
+    最后修改:${mtime}; 
+    时间差:${timeDiff}; 
+    名称合法？${FILE_NAME_PATTERN.test(fileName)}; 
+    过期？${timeDiff > TIMEOUT_DAY}`
+    )
 
     let nameValid = FILE_NAME_PATTERN.test(fileName)
     // let nameValid = PATTERN.test(fileName)
-    let expired = timeDiff > timeoutDay
+    let expired = timeDiff > TIMEOUT_DAY
     // 符合指定命名格式，且最后修改日期大于指定过期时间
     if (nameValid) {
       if (expired) {
         log.verb('符合条件，准备处理')
-        let relativePath = path.relative(rootPath, dirPath)
-        // let targetName = relativePath.replace(/\//g, DELIMITER)
-        // let targetPath = path.resolve(trashPath, targetName)
+        let relativePath = path.relative(SRC_PATH, dirPath)
         let targetPath = path.resolve(trashPath, relativePath)
-
+        try{
+          await fsPromises.access(filePath, fs.constants.W_OK)
+        }catch(e){
+          log.verb('无访问${filePath}权限，跳过')
+          continue;
+        }
         if (MODE === 'ls') {
           // 查看模式
           log.info(`找到: ${filePath}`)
@@ -178,16 +200,24 @@ async function clear(dirPath, isRoot) {
 
         if (MODE === 'cp') {
           // 复制模式
-          let rs = shell.cp('-rf', filePath, targetPath)
-          await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
-          log.info(`复制 ${filePath} 到 ${targetPath} ${rs.stderr?'失败['+rs.stderr+']':'成功'}!`)
+          try{
+            let rs = shell.cp('-rf', filePath, targetPath)
+            await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
+            log.info(`复制 ${filePath} 到 ${targetPath} ${rs.stderr?'失败['+rs.stderr+']':'成功'}!`)
+          }catch(e){
+            log.info(`复制 ${filePath} 到 ${targetPath} 失败:${e.message}`)
+          }
           continue;
         }  
         if (MODE === 'mv') {
           // 移动模式
-          await fsPromises.rename(filePath, path.resolve(targetPath, fileName))
-          // await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
-          log.info(`移动 ${filePath} 到 ${targetPath} 成功!`)
+          try{
+            await fsPromises.rename(filePath, path.resolve(targetPath, fileName))
+            // await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
+            log.info(`移动 ${filePath} 到 ${targetPath} 成功!`)
+          }catch(e){
+            log.info(`移动 ${filePath} 到 ${targetPath} 失败:${e.message}`)
+          }
           continue;
         } 
       } else {
@@ -204,25 +234,25 @@ async function clear(dirPath, isRoot) {
 
 async function trashClean(){
   try{
-    await fsPromises.access(trashRoot)
+    await fsPromises.access(TRASH_ROOT)
   }catch(e){
     log.err('回收站不存在，不需要清除')
     return;
   }
-  let stat = await fsPromises.stat(trashRoot)
+  let stat = await fsPromises.stat(TRASH_ROOT)
   if(stat.isDirectory()){
-    let nameList = await fsPromises.readdir(trashRoot)
-    log.verb('回收站列表：', nameList)
+    let dateDirsList = await fsPromises.readdir(TRASH_ROOT)
+    log.verb('回收站列表：', dateDirsList)
     log.info('开始扫描回收站...')
-    for(let name of nameList){
-      let dailyTrashPath = path.resolve(trashRoot, name)
+    for(let dateDir of dateDirsList){
+      let dailyTrashPath = path.resolve(TRASH_ROOT, dateDir)
       let st = await fsPromises.stat(dailyTrashPath)
       let mtime = st.mtime
       // let trashDate = moment(ctime);
-      if(!FILE_NAME_PATTERN.test(name)){
+      if(!FILE_NAME_PATTERN.test(dateDir)){
         continue;
       }
-      let trashDate = moment(name, 'YYYY-MM-DD');
+      let trashDate = moment(dateDir, 'YYYY-MM-DD');
       let timeDiff = moment().diff(trashDate, 'day') //时差
       log.verb(`回收站文件:${dailyTrashPath}, 删除日期:${trashDate}, 删除天数:${timeDiff}`)
       if(timeDiff > RETAIN_DAYS){
