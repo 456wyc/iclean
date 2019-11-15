@@ -78,7 +78,7 @@ async function start() {
     '\n回收站保留期（天）:', RETAIN_DAYS,
     '\n强制减少有效期:', FORCE,
     '\n输出日志:', LOG,
-    '\n详细日志:', LOG,
+    '\n详细日志:', VERB,
     '\n只清理回收站:', ONLY_TRASH,
     '\n自动确认执行:', AUTO_CONFIRM,
     )
@@ -96,10 +96,14 @@ async function start() {
         process.exit()
       }
     }
-    log.verb(`回收站主目录:${trashRoot}, 今日回收站目录:${trashPath}`)
-    await fsPromises.mkdir(trashPath, {
-      recursive: true
-    })
+    //只有复制和移动模式下创建回收站目录
+    if(['cp','mv'].includes(MODE)&& !ONLY_TRASH){
+      log.verb('')
+      await fsPromises.mkdir(trashPath, {
+        recursive: true
+      })
+      log.verb(`回收站主目录:${trashRoot}, 今日回收站目录:${trashPath}`)
+    }
     
     log.info('开始:', moment().format())
     log.info('清理回收站...')
@@ -159,6 +163,12 @@ async function clear(dirPath, isRoot) {
         // let targetPath = path.resolve(trashPath, targetName)
         let targetPath = path.resolve(trashPath, relativePath)
 
+        if (MODE === 'ls') {
+          // 查看模式
+          log.info(`找到: ${filePath}`)
+          continue
+        }
+
         try {
           await fsPromises.access(targetPath)
         } catch (e) {
@@ -171,17 +181,15 @@ async function clear(dirPath, isRoot) {
           let rs = shell.cp('-rf', filePath, targetPath)
           await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
           log.info(`复制 ${filePath} 到 ${targetPath} ${rs.stderr?'失败['+rs.stderr+']':'成功'}!`)
-        } else if (MODE === 'mv') {
+          continue;
+        }  
+        if (MODE === 'mv') {
           // 移动模式
           await fsPromises.rename(filePath, path.resolve(targetPath, fileName))
           await fsPromises.utimes(path.resolve(targetPath, fileName), atime, mtime) //保留时间戳
           log.info(`移动 ${filePath} 到 ${targetPath} 成功!`)
-        } else if (MODE === 'ls') {
-          // 查看模式
-          log.info(`找到: ${filePath}`)
-        } else {
-          // 其他模式，不处理
-        }
+          continue;
+        } 
       } else {
         log.verb('有效期内，不处理')
       }
@@ -228,7 +236,9 @@ async function trashClean(){
 
 function boolParse(bool){
   if(bool && bool.toLowerCase()!=='false'){
+    // console.log('boolParse',bool, true)
     return true
   }
+  // console.log('boolParse',bool, false)
   return false
 }
