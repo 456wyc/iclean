@@ -6,7 +6,7 @@ const commander = require('commander')
 const moment = require('moment')
 const shell = require('shelljs')
 const pkg = require('./package')
-
+console.log('cwd', process.cwd())
 const program = new commander.Command()
 program.version(pkg.version)
 
@@ -25,7 +25,7 @@ if (!program.dir) {
   process.exit(1)
 }
 
-const rootPath = path.resolve(__dirname, program.dir)
+const rootPath = path.resolve(process.cwd(), program.dir)
 const MODE = program.mode
 const FORCE = program.force
 const timeoutDay = !program.timeout || (program.timeout < 90 && !FORCE) ?

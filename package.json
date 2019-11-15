@@ -1,6 +1,6 @@
 {
   "name": "@tinoq/iclean",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "清理过期文件",
   "main": "index.js",
   "bin": {
