@@ -5,6 +5,8 @@ const fsPromises = require('fs').promises
 const commander = require('commander')
 const moment = require('moment')
 const shell = require('shelljs')
+const inquirer = require('inquirer');
+
 const pkg = require('./package')
 console.log('cwd', process.cwd())
 const program = new commander.Command()
@@ -14,9 +16,12 @@ program
   .requiredOption('-d, --dir <path>', '【必要】需要清理的文件夹路径')
   .option('-m, --mode <string>', '操作模式，复制[cp]，移动[mv]，查看[ls]', 'ls')
   .option('-t, --timeout <number>', '过期天数，不小于90', 90)
-  .option('-f, --force <boolean>', '强制使用小于90天的参数', false)
-  .option('-l, --log <boolean>', '输出日志', true, Boolean.parse)
-  .option('-v, --verb <boolean>', '输出详细日志', false)
+  .option('-r, --retain <number>', '已删除文件保留天数，不小于7', 15)
+  .option('-f, --force <boolean>', '当传入的 timeout，retain 小于限制的值时，强制使用', boolParse, false)
+  .option('-l, --log <boolean>', '输出日志', boolParse, true)
+  .option('-v, --verb <boolean>', '输出详细日志', boolParse, false)
+  .option('-o, --onlytrash <boolean>', '只清理回收站', boolParse, false)
+  .option('-c, --confirm <boolean>', '自动确认按参数执行，适用于自动化脚本', boolParse, false)
   // .option('-p, --pattern <string>', '文件夹名称匹配模式', /\d{4}-\d{2}-\d{2}/g)
 
 program.parse(process.argv)
@@ -36,6 +41,11 @@ const VERB = program.verb; //是否打印详细日志
 const FILE_NAME_PATTERN = /^\d{4}-\d{2}-\d{2}$/ //需要操作的文件的名称匹配模式
 const TRASH_ROOT_DIR_NAME = '_trash' //回收站文件夹名称
 // const DELIMITER = '#' //路径扁平化分隔符
+// const RETAIN_DAYS = program.retain<7 ? 7 : Math.ceil(Math.abs(program.retain)); //回收站保留天数
+const RETAIN_DAYS = !program.retain || (program.retain < 7 && !FORCE) ?
+  7 :  Math.ceil(Math.abs(program.retain)); //回收站保留天数
+const ONLY_TRASH = program.onlytrash;
+const AUTO_CONFIRM = program.confirm;
 
 const log = {
   verb() {
@@ -53,19 +63,51 @@ const log = {
   }
 }
 
-log.info('搜索目录:', rootPath, '有效期:', timeoutDay, '操作模式:', MODE)
+
 
 const dateString = moment().format('YYYY-MM-DD')
+const trashRoot = path.resolve(rootPath, TRASH_ROOT_DIR_NAME)
 const trashPath = path.resolve(rootPath, TRASH_ROOT_DIR_NAME, dateString)
-
 start()
 
 async function start() {
+  console.info('===================================')
+  log.info('搜索目录:', rootPath, 
+    '\n操作模式:', MODE,
+    '\n文件有效期（天）:', timeoutDay, 
+    '\n回收站保留期（天）:', RETAIN_DAYS,
+    '\n强制减少有效期:', FORCE,
+    '\n输出日志:', LOG,
+    '\n详细日志:', LOG,
+    '\n只清理回收站:', ONLY_TRASH,
+    '\n自动确认执行:', AUTO_CONFIRM,
+    )
+  console.info('===================================')
   try {
+    if(!AUTO_CONFIRM){
+      let answers = await inquirer.prompt([{
+        name: 'confirmRun',
+        type: 'confirm',
+        message: '是否确认执行？',
+        default: false,
+      }])
+      if(!answers.confirmRun){
+        console.log('确认不执行，退出！')
+        process.exit()
+      }
+    }
+    log.verb(`回收站主目录:${trashRoot}, 今日回收站目录:${trashPath}`)
     await fsPromises.mkdir(trashPath, {
       recursive: true
     })
+    
     log.info('开始:', moment().format())
+    log.info('清理回收站...')
+    await trashClean()
+    if(ONLY_TRASH){
+      return;
+    }
+    log.info('清理回收站完成!')
     await clear(rootPath, true)
     log.info('结束:', moment().format())
   } catch (e) {
@@ -149,4 +191,44 @@ async function clear(dirPath, isRoot) {
     await clear(filePath, false)
   }
   return;
+}
+
+
+async function trashClean(){
+  try{
+    await fsPromises.access(trashRoot)
+  }catch(e){
+    log.err('回收站不存在，不需要清除')
+    return;
+  }
+  let stat = await fsPromises.stat(trashRoot)
+  if(stat.isDirectory()){
+    let nameList = await fsPromises.readdir(trashRoot)
+    log.verb('回收站列表：', nameList)
+    log.info('开始扫描回收站...')
+    for(let name of nameList){
+      let dailyTrashPath = path.resolve(trashRoot, name)
+      let st = await fsPromises.stat(dailyTrashPath)
+      let mtime = st.mtime
+      // let trashDate = moment(ctime);
+      if(!FILE_NAME_PATTERN.test(name)){
+        continue;
+      }
+      let trashDate = moment(name, 'YYYY-MM-DD');
+      let timeDiff = moment().diff(trashDate, 'day') //时差
+      log.verb(`回收站文件:${dailyTrashPath}, 删除日期:${trashDate}, 删除天数:${timeDiff}`)
+      if(timeDiff > RETAIN_DAYS){
+        // await fsPromises.rmdir(tPath)
+        shell.rm('-r', dailyTrashPath)
+        log.info(`删除过期文件：${dailyTrashPath}`)
+      }
+    }
+  }
+}
+
+function boolParse(bool){
+  if(bool && bool.toLowerCase()!=='false'){
+    return true
+  }
+  return false
 }
