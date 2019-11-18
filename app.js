@@ -236,7 +236,7 @@ async function trashClean(){
   try{
     await fsPromises.access(TRASH_ROOT)
   }catch(e){
-    log.err('回收站不存在，不需要清除')
+    log.verb('回收站不存在，不需要清除')
     return;
   }
   let stat = await fsPromises.stat(TRASH_ROOT)
